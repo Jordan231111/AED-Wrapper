@@ -14,7 +14,7 @@ gg_setVisible(false)
 
 -- Display welcome message
 gg_toast("Loading AED Tool...")
-gg_alert("Welcome to AED Tool\n\nThis simplified version will download and run the script directly.\n\nPress OK to continue.")
+gg_toast("Welcome to AED Tool\n\nThis simplified version will download and run the script directly.\n\nPress OK to continue.")
 
 -- Direct URL to original script
 local SCRIPT_URL = "https://raw.githubusercontent.com/Jordan231111/AED/main/main.lua"
