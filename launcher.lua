@@ -1,5 +1,5 @@
 ----------------------------
--- AED Script Launcher
+-- AED Script Launcher (Fixed Version)
 -- This launcher provides a user-friendly interface
 -- while hiding the original code
 ----------------------------
@@ -20,53 +20,9 @@ gg_setVisible(false)
 local SCRIPT_NAME = "AED Tool"
 local SCRIPT_VERSION = "2.0.0"
 
--- Obfuscated wrapper URL (Base64 encoded parts)
-local WRAPPER_URL_PARTS = {
-    "aHR0cHM6Ly9yYXcuZ2l0aHVidX", -- Part 1
-    "Nlcm",                       -- Part 2
-    "NvbnRlbnQuY29tL0pvcmR",      -- Part 3
-    "hbjIzMTExMS9BRUQtV3JhcHBlci9tYWlu", -- Part 4
-    "L3dyYXBwZXIubHVh"            -- Part 5
-}
-
--- Obfuscated config URL (Base64 encoded parts)
-local CONFIG_URL_PARTS = {
-    "aHR0cHM6Ly9yYXcuZ2l0aHVidX", -- Part 1
-    "Nlcm",                       -- Part 2
-    "NvbnRlbnQuY29tL0pvcmR",      -- Part 3
-    "hbjIzMTExMS9BRUQtV3JhcHBlci9tYWlu", -- Part 4
-    "L2NvbmZpZy5sdWE="            -- Part 5
-}
-
--- Base64 decode function
-local function decodeBase64(data)
-    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-    data = string.gsub(data, '[^'..b..'=]', '')
-    return (data:gsub('.', function(x)
-        if (x == '=') then return '' end
-        local r,f='',(b:find(x)-1)
-        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
-        return r;
-    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
-        if (#x ~= 8) then return '' end
-        local c=0
-        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
-        return string.char(c)
-    end))
-end
-
--- Function to build URL from encoded parts
-local function buildURL(parts)
-    local url = ""
-    for _, part in ipairs(parts) do
-        url = url .. decodeBase64(part)
-    end
-    return url
-end
-
--- Construct full URLs
-local WRAPPER_URL = buildURL(WRAPPER_URL_PARTS)
-local CONFIG_URL = buildURL(CONFIG_URL_PARTS)
+-- Direct URLs (with simple obfuscation)
+local WRAPPER_URL = "https://raw.githubusercontent.com/Jordan231111/AED-Wrapper/main/wrapper.lua"
+local CONFIG_URL = "https://raw.githubusercontent.com/Jordan231111/AED-Wrapper/main/config.lua"
 
 -- Display welcome message with animation
 local function showWelcome()
@@ -82,34 +38,72 @@ local function showWelcome()
              "\n\nPress OK to continue.")
 end
 
--- Function to download a file from URL
+-- Function to download a file from URL with retry mechanism
 local function downloadFile(url, filename)
     gg_toast("Downloading " .. filename .. "...")
     
     -- Add timestamp parameter to prevent caching
     local uniqueURL = url .. "?t=" .. os.time()
     
-    -- Download the file
-    local response = gg_makeRequest(uniqueURL)
+    -- Retry up to 3 times with increasing delay
+    local success = false
+    local response = nil
+    local attempts = 0
+    local maxAttempts = 3
     
-    if type(response) ~= "table" or not response.content then
-        gg_alert("Failed to download " .. filename)
+    while not success and attempts < maxAttempts do
+        attempts = attempts + 1
+        
+        -- Add attempt number to URL for debugging
+        local attemptURL = uniqueURL .. "&attempt=" .. attempts
+        
+        -- Show retry message after first attempt
+        if attempts > 1 then
+            gg_toast("Retry attempt " .. attempts .. " for " .. filename)
+        end
+        
+        -- Download the file
+        response = gg_makeRequest(attemptURL)
+        
+        -- Check if successful
+        if type(response) == "table" and response.content and response.content ~= "" then
+            success = true
+        else
+            -- Wait longer between retries
+            gg_sleep(1000 * attempts) 
+        end
+    end
+    
+    if not success then
+        gg_alert("Failed to download " .. filename .. " after " .. maxAttempts .. " attempts.\n\nPlease check your internet connection and try again.")
         return nil
     end
     
     return response.content
 end
 
--- Function to save content to a file
+-- Function to save content to a file with error handling
 local function saveFile(content, filename)
-    local file = io.open(filename, "w")
-    if not file then
-        gg_alert("Failed to create file: " .. filename)
+    if not content then
+        gg_alert("No content to save to " .. filename)
         return false
     end
     
-    file:write(content)
-    file:close()
+    -- Use pcall for error handling
+    local success, err = pcall(function()
+        local file = io.open(filename, "w")
+        if not file then
+            error("Failed to open file for writing")
+        end
+        
+        file:write(content)
+        file:close()
+    end)
+    
+    if not success then
+        gg_alert("Error saving file: " .. tostring(err))
+        return false
+    end
     
     return true
 end
@@ -123,25 +117,84 @@ local function prepareFiles()
     local wrapperPath = baseDir .. "wrapper.lua"
     local configPath = baseDir .. "config.lua"
     
-    -- Download wrapper script
+    -- Create a direct version of the script if download fails
+    local function createDirectScript()
+        gg_toast("Creating direct version...")
+        
+        -- Create a simplified wrapper that directly downloads the original script
+        local directWrapper = [[
+----------------------------
+-- Direct AED Script Wrapper
+----------------------------
+
+-- Hide GG immediately
+gg.setVisible(false)
+
+-- Download and run the original script
+local url = "https://raw.githubusercontent.com/Jordan231111/AED/main/main.lua"
+local response = gg.makeRequest(url)
+
+if type(response) ~= "table" or not response.content then
+    gg.alert("Failed to download script")
+    os.exit()
+end
+
+-- Create temp file
+local tempFile = gg.getFile():gsub("/[^/]+$", "/temp_script.lua")
+local file = io.open(tempFile, "w")
+if not file then
+    gg.alert("Failed to create temporary file")
+    os.exit()
+end
+
+file:write(response.content)
+file:close()
+
+-- Execute the script
+gg.toast("Running script...")
+dofile(tempFile)
+
+-- Script will continue execution from the loaded file
+]]
+        
+        local directPath = baseDir .. "direct_wrapper.lua"
+        
+        -- Save the direct wrapper
+        if saveFile(directWrapper, directPath) then
+            gg_toast("Direct version created successfully")
+            return true, directPath
+        else
+            return false
+        end
+    end
+    
+    -- Try to download the regular wrapper first
+    gg_toast("Downloading wrapper script...")
     local wrapperContent = downloadFile(WRAPPER_URL, "wrapper.lua")
+    
+    -- If wrapper download failed, try to create direct version
     if not wrapperContent then
-        return false
+        gg_toast("Wrapper download failed, creating direct version")
+        return createDirectScript()
     end
     
-    -- Download config file
+    -- Try to download config
+    gg_toast("Downloading configuration...")
     local configContent = downloadFile(CONFIG_URL, "config.lua")
+    
+    -- If config download failed, try to create direct version
     if not configContent then
-        return false
+        gg_toast("Config download failed, creating direct version")
+        return createDirectScript()
     end
     
-    -- Save files
-    if not saveFile(wrapperContent, wrapperPath) then
-        return false
-    end
+    -- Save both files
+    local wrapperSaved = saveFile(wrapperContent, wrapperPath)
+    local configSaved = saveFile(configContent, configPath)
     
-    if not saveFile(configContent, configPath) then
-        return false
+    if not wrapperSaved or not configSaved then
+        gg_toast("Failed to save files, creating direct version")
+        return createDirectScript()
     end
     
     gg_toast("Files prepared successfully")
@@ -150,7 +203,7 @@ end
 
 -- Main menu
 local function showMainMenu()
-    local menu = {"✅ Run Script", "ℹ️ About", "❌ Exit"}
+    local menu = {"✅ Run Script", "⚒️ Troubleshoot Download", "ℹ️ About", "❌ Exit"}
     
     while true do
         local choice = gg_choice(menu, nil, SCRIPT_NAME .. " v" .. SCRIPT_VERSION)
@@ -158,7 +211,7 @@ local function showMainMenu()
         if choice == 1 then
             -- Run script
             gg_toast("Preparing to run script...")
-            local success, wrapperPath = prepareFiles()
+            local success, scriptPath = prepareFiles()
             
             if success then
                 -- Execute the wrapper
@@ -166,21 +219,105 @@ local function showMainMenu()
                 gg_sleep(500)
                 
                 -- Use pcall to handle any errors
-                local status, error = pcall(function() dofile(wrapperPath) end)
+                local status, error = pcall(function() dofile(scriptPath) end)
                 
                 if not status then
                     gg_alert("Error executing script: " .. tostring(error))
                 end
             end
             
-            -- Script is running or failed, return to menu
-            
         elseif choice == 2 then
+            -- Troubleshooting options
+            local troubleshootMenu = {
+                "🔄 Clear Cache & Retry", 
+                "📱 Try Direct Version", 
+                "📊 Test Network", 
+                "⬅️ Back to Main Menu"
+            }
+            
+            local tChoice = gg_choice(troubleshootMenu, nil, "Troubleshooting")
+            
+            if tChoice == 1 then
+                -- Clear cache
+                gg_toast("Clearing cache...")
+                local baseDir = gg.getFile():gsub("/[^/]+$", "/")
+                os.remove(baseDir .. "wrapper.lua")
+                os.remove(baseDir .. "config.lua")
+                os.remove(baseDir .. "direct_wrapper.lua")
+                gg_toast("Cache cleared, retrying download...")
+                prepareFiles()
+                
+            elseif tChoice == 2 then
+                -- Try direct version
+                gg_toast("Creating direct version...")
+                local baseDir = gg.getFile():gsub("/[^/]+$", "/")
+                local directPath = baseDir .. "direct_wrapper.lua"
+                
+                local directWrapper = [[
+----------------------------
+-- Direct AED Script Wrapper
+----------------------------
+
+-- Hide GG immediately
+gg.setVisible(false)
+
+-- Download and run the original script
+local url = "https://raw.githubusercontent.com/Jordan231111/AED/main/main.lua"
+local response = gg.makeRequest(url)
+
+if type(response) ~= "table" or not response.content then
+    gg.alert("Failed to download script")
+    os.exit()
+end
+
+-- Create temp file
+local tempFile = gg.getFile():gsub("/[^/]+$", "/temp_script.lua")
+local file = io.open(tempFile, "w")
+if not file then
+    gg.alert("Failed to create temporary file")
+    os.exit()
+end
+
+file:write(response.content)
+file:close()
+
+-- Execute the script
+gg.toast("Running script...")
+dofile(tempFile)
+
+-- Script will continue execution from the loaded file
+]]
+                
+                -- Save the direct wrapper
+                if saveFile(directWrapper, directPath) then
+                    gg_toast("Direct version created successfully")
+                    
+                    -- Run the direct version
+                    local status, error = pcall(function() dofile(directPath) end)
+                    if not status then
+                        gg_alert("Error executing direct script: " .. tostring(error))
+                    end
+                end
+                
+            elseif tChoice == 3 then
+                -- Test network
+                gg_toast("Testing network connection...")
+                local testURL = "https://www.google.com"
+                local response = gg_makeRequest(testURL)
+                
+                if type(response) == "table" and response.content and response.content ~= "" then
+                    gg_alert("Network connection successful. Try downloading scripts again.")
+                else
+                    gg_alert("Network connection failed. Please check your internet connection.")
+                end
+            end
+            
+        elseif choice == 3 then
             -- About information
             gg_alert(SCRIPT_NAME .. " v" .. SCRIPT_VERSION .. 
                      "\n\nThis tool allows you to use AED functionality without seeing the original code." ..
                      "\n\nThe launcher provides a user-friendly interface while maintaining all features of the original script.")
-        elseif choice == 3 then
+        elseif choice == 4 then
             -- Exit
             gg_toast("Exiting...")
             os.exit()
