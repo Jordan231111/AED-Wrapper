@@ -19,8 +19,54 @@ gg_setVisible(false)
 -- Script information
 local SCRIPT_NAME = "AED Tool"
 local SCRIPT_VERSION = "2.0.0"
-local WRAPPER_URL = "https://raw.githubusercontent.com/Jordan231111/AED-Wrapper/main/wrapper.lua"
-local CONFIG_URL = "https://raw.githubusercontent.com/Jordan231111/AED-Wrapper/main/config.lua"
+
+-- Obfuscated wrapper URL (Base64 encoded parts)
+local WRAPPER_URL_PARTS = {
+    "aHR0cHM6Ly9yYXcuZ2l0aHVidX", -- Part 1
+    "Nlcm",                       -- Part 2
+    "NvbnRlbnQuY29tL0pvcmR",      -- Part 3
+    "hbjIzMTExMS9BRUQtV3JhcHBlci9tYWlu", -- Part 4
+    "L3dyYXBwZXIubHVh"            -- Part 5
+}
+
+-- Obfuscated config URL (Base64 encoded parts)
+local CONFIG_URL_PARTS = {
+    "aHR0cHM6Ly9yYXcuZ2l0aHVidX", -- Part 1
+    "Nlcm",                       -- Part 2
+    "NvbnRlbnQuY29tL0pvcmR",      -- Part 3
+    "hbjIzMTExMS9BRUQtV3JhcHBlci9tYWlu", -- Part 4
+    "L2NvbmZpZy5sdWE="            -- Part 5
+}
+
+-- Base64 decode function
+local function decodeBase64(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    data = string.gsub(data, '[^'..b..'=]', '')
+    return (data:gsub('.', function(x)
+        if (x == '=') then return '' end
+        local r,f='',(b:find(x)-1)
+        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if (#x ~= 8) then return '' end
+        local c=0
+        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
+
+-- Function to build URL from encoded parts
+local function buildURL(parts)
+    local url = ""
+    for _, part in ipairs(parts) do
+        url = url .. decodeBase64(part)
+    end
+    return url
+end
+
+-- Construct full URLs
+local WRAPPER_URL = buildURL(WRAPPER_URL_PARTS)
+local CONFIG_URL = buildURL(CONFIG_URL_PARTS)
 
 -- Display welcome message with animation
 local function showWelcome()
