@@ -1,21 +1,19 @@
 ----------------------------
--- AED Wrapper Configuration
+-- AED Wrapper Configuration (Fixed Version)
 ----------------------------
 
 -- Define global configuration
 _G.CONFIG = {
-    -- Source configuration (obfuscated)
-    sourceType = "dynamic",
+    -- Source configuration - simplified for reliability
+    sourceType = "direct",
     sourceParams = {
-        parts = {
-            "Z2l0aHViLmNvbS9Kb3JkYW4yMzEx", -- Base domain and user (encoded)
-            "MTEvQUVE",                     -- Repository name (encoded)
-            "bWFpbi9tYWluLmx1YQ=="          -- Path and filename (encoded)
-        },
         protocol = "https",
         mode = "raw",
-        format = "base64"
+        format = "plain"
     },
+    
+    -- Direct source URL as backup
+    directSourceURL = "https://raw.githubusercontent.com/Jordan231111/AED/main/main.lua",
     
     -- Version information
     version = "1.0.0",
@@ -28,5 +26,8 @@ _G.CONFIG = {
     validateChecksum = false,
     expectedChecksum = nil,  -- Can be used for script validation
     antiDebug = true,
-    obfuscationLevel = 2     -- 1 = minimal, 2 = standard, 3 = maximum
+    obfuscationLevel = 1     -- Reduced for reliability (1 = minimal, 2 = standard, 3 = maximum)
 }
+
+-- Override the config to use direct access for improved reliability
+_G.CONFIG.sourceType = "direct"
