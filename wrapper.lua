@@ -29,15 +29,76 @@ local function loadConfig()
         end
     end
     return false
- end
+end
+
+-- Base64 decode function
+local function decodeBase64(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    data = string.gsub(data, '[^'..b..'=]', '')
+    return (data:gsub('.', function(x)
+        if (x == '=') then return '' end
+        local r,f='',(b:find(x)-1)
+        for i=6,1,-1 do r=r..(f%2^i-f%2^(i-1)>0 and '1' or '0') end
+        return r;
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if (#x ~= 8) then return '' end
+        local c=0
+        for i=1,8 do c=c+(x:sub(i,i)=='1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
+
+-- Function to build the script URL from obfuscated config
+local function buildScriptURL()
+    local sourceParams = config.sourceParams
+    
+    if config.sourceType ~= "dynamic" or not sourceParams then
+        gg_alert("Invalid source configuration")
+        os.exit()
+        return nil
+    end
+    
+    -- Check required elements
+    if not sourceParams.parts or not sourceParams.protocol or not sourceParams.mode then
+        gg_alert("Missing required source parameters")
+        os.exit()
+        return nil
+    end
+    
+    -- Decode parts based on format
+    local decodedParts = {}
+    for i, part in ipairs(sourceParams.parts) do
+        if sourceParams.format == "base64" then
+            decodedParts[i] = decodeBase64(part)
+        else
+            decodedParts[i] = part
+        end
+    end
+    
+    -- Build URL based on mode
+    local baseURL = sourceParams.protocol .. "://"
+    if sourceParams.mode == "raw" then
+        baseURL = baseURL .. "raw.githubusercontent.com/"
+    else
+        baseURL = baseURL .. "github.com/"
+    end
+    
+    -- Combine parts
+    local combinedParts = table.concat(decodedParts, "/")
+    
+    -- Construct final URL
+    local finalURL = baseURL .. combinedParts
+    
+    return finalURL
+end
 
 -- Function to download the original script
 local function downloadScript()
-    local scriptURL = config.scriptURL
+    local scriptURL = buildScriptURL()
     
     -- Validate URL
     if not scriptURL or scriptURL == "" then
-        gg_alert("Invalid script URL in config")
+        gg_alert("Failed to build script URL")
         os.exit()
         return nil
     end
@@ -60,8 +121,31 @@ end
 
 -- Function to execute script content safely
 local function executeScript(scriptContent)
+    -- Apply obfuscation if enabled
+    if config.obfuscateExecution then
+        -- Add some random comments to obfuscate the script
+        local obfuscated = "-- " .. os.time() .. "\n"
+        
+        -- Split the script into chunks with random markers
+        local chunks = {}
+        local chunkSize = 1000
+        for i = 1, #scriptContent, chunkSize do
+            chunks[#chunks + 1] = scriptContent:sub(i, i + chunkSize - 1)
+        end
+        
+        -- Reassemble with random markers
+        for i, chunk in ipairs(chunks) do
+            obfuscated = obfuscated .. chunk
+            if i < #chunks then
+                obfuscated = obfuscated .. "\n-- " .. math.random(1000000, 9999999) .. "\n"
+            end
+        end
+        
+        scriptContent = obfuscated
+    end
+    
     -- Create a temporary file with the script content
-    local tempScriptFile = gg.getFile():gsub("/[^/]+$", "/temp_script.lua")
+    local tempScriptFile = gg.getFile():gsub("/[^/]+$", "/temp_" .. os.time() .. "_" .. math.random(1000, 9999) .. ".lua")
     local file = io.open(tempScriptFile, "w")
     if not file then
         gg_alert("Failed to create temporary script file")
