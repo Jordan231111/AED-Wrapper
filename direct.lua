@@ -1,6 +1,6 @@
 ----------------------------
--- Direct AED Script Launcher (Enhanced)
--- Ultra-simplified version with improved security
+-- Secure Execution Environment
+-- Maximum security with memory execution
 ----------------------------
 
 -- Cache gg functions for speed
@@ -9,141 +9,223 @@ local gg_alert = gg.alert
 local gg_setVisible = gg.setVisible
 local gg_makeRequest = gg.makeRequest
 local gg_sleep = gg.sleep
+local gg_choice = gg.choice
 
--- Initialize state variables
-local tempFile = nil
-local hasShownError = false
+-- State tracking
+local isRunning = true
+local errorOccurred = false
+local cleanupInterval = 500 -- milliseconds
+local lastCleanupTime = os.time()
+local tempFilePath = nil
+
+-- Secure temporary file path generation
+local function generateSecurePath()
+    -- Get the GameGuardian directory
+    local ggDir = gg.getFile():gsub("/[^/]+$", "/")
+    
+    -- Create a unique but non-descriptive filename
+    -- Using 8 random hex characters
+    local randomChars = ""
+    for i = 1, 8 do
+        randomChars = randomChars .. string.format("%x", math.random(0, 15))
+    end
+    
+    -- Hidden prefix to make it harder to spot
+    return ggDir .. "." .. randomChars .. ".tmp"
+end
 
 -- Hide GG immediately
 gg_setVisible(false)
 
--- Display welcome message
-gg_toast("Loading Tool...")
-gg_alert("Welcome\n\nThis simplified tool will run securely without revealing source code.\n\nPress OK to continue.")
+-- Show a simple menu that doesn't reveal purpose
+local function showMenu()
+    local menu = {"▶️ Start", "❌ Exit"}
+    local choice = gg_choice(menu, nil, "Quick Launcher")
+    
+    if choice == 2 or choice == nil then
+        gg_toast("Exiting...")
+        os.exit()
+    end
+end
 
--- Obfuscated URL split into parts for security
-local urlParts = {
-    "https://r",
-    "aw.githubuserco",
-    "ntent.com/Jor", 
-    "dan23", 
-    "1111/A", 
-    "ED/ma", 
-    "in/main.lua"
+-- Show menu first
+showMenu()
+
+-- Display minimal loading message
+gg_toast("Initializing...")
+
+-- Obfuscated URL components
+local urlComponents = {
+    protocol = "https",
+    domain = {
+        "raw", "githubusercontent", "com"
+    },
+    path = {
+        "Jordan231111", "AED", "main", "main.lua"
+    }
 }
 
--- Function to download and run the script
-local function downloadAndRun()
-    -- Show download message with randomized text
-    local loadingTexts = {"Initializing...", "Preparing...", "Setting up...", "Loading components..."}
-    gg_toast(loadingTexts[math.random(1, #loadingTexts)])
+-- Build URL without revealing it
+local function buildSecureUrl()
+    local url = urlComponents.protocol .. "://"
+    url = url .. table.concat(urlComponents.domain, ".")
+    url = url .. "/"
+    url = url .. table.concat(urlComponents.path, "/")
     
-    -- Build URL from parts to prevent easy discovery
-    local url = table.concat(urlParts) .. "?nocache=" .. os.time() .. "&r=" .. math.random(1000, 9999)
+    -- Add cache-busting parameters that look generic
+    url = url .. "?v=" .. math.random(100000, 999999)
     
-    -- Download the script without revealing the URL
-    gg_toast("Downloading components...")
+    return url
+end
+
+-- Download content securely
+local function downloadSecurely()
+    local url = buildSecureUrl()
+    
+    -- Random loading messages
+    local messages = {
+        "Processing...",
+        "Please wait...",
+        "Working...",
+        "Preparing environment..."
+    }
+    gg_toast(messages[math.random(1, #messages)])
+    
+    -- Perform request
     local response = gg_makeRequest(url)
     
-    -- Check if download was successful
+    -- Validate response
     if type(response) ~= "table" or not response.content or response.content == "" then
-        if not hasShownError then
-            hasShownError = true
-            gg_alert("Network error. Please check your connection and try again.")
-        end
-        return false
+        errorOccurred = true
+        gg_alert("Connection error. Please check network and try again.")
+        return nil
     end
     
-    -- Create temporary file with random name for the script
-    local randomName = "temp_" .. math.random(10000000, 99999999)
-    tempFile = gg.getFile():gsub("/[^/]+$", "/" .. randomName .. ".lua")
+    return response.content
+end
+
+-- Create temporary file with secure practices
+local function createTempFile(content)
+    if not content then return false end
     
-    -- Try to create and write to the file
-    local file, openError = io.open(tempFile, "w")
-    if not file then
-        if not hasShownError then
-            hasShownError = true
-            gg_alert("Storage error. Please check permissions.")
-        end
-        return false
-    end
+    -- Generate secure path
+    tempFilePath = generateSecurePath()
     
-    -- Write script content to file
-    file:write(response.content)
-    file:close()
+    -- Create file with error handling
+    local success, err = pcall(function()
+        local file = io.open(tempFilePath, "w")
+        if not file then error("Failed to create temporary file") end
+        file:write(content)
+        file:close()
+    end)
     
-    -- Run the script
-    gg_toast("Launching...")
-    
-    -- Try to execute the script
-    -- We use loadfile + pcall instead of dofile to get better error handling
-    local scriptFunc, loadError = loadfile(tempFile)
-    
-    if not scriptFunc then
-        if not hasShownError then
-            hasShownError = true
-            gg_alert("Load error: " .. tostring(loadError))
-        end
-        -- Clean up tempfile
-        pcall(function() os.remove(tempFile) end)
-        tempFile = nil
-        return false
-    end
-    
-    -- Execute with pcall
-    local success, runError = pcall(scriptFunc)
-    
-    -- We don't cleanup the temp file here because the script will continue running
-    -- Cleanup will happen via the atexit function below
-    
-    if not success and not hasShownError then
-        hasShownError = true
-        gg_alert("Execution error: " .. tostring(runError))
+    if not success then
+        errorOccurred = true
+        gg_alert("Initialization error. Please try again.")
         return false
     end
     
     return true
 end
 
--- Setup cleanup function that will run when script exits
-local oldExit = os.exit
-os.exit = function(code)
-    -- Clean up temp file
-    if tempFile then
-        pcall(function() os.remove(tempFile) end)
-        tempFile = nil
-    end
+-- Cleanup function
+local function secureCleaner()
+    if not tempFilePath then return end
     
-    -- Call original exit with the same code
-    oldExit(code)
+    -- Use pcall to ensure errors don't stop execution
+    pcall(function()
+        -- Check if file exists
+        local f = io.open(tempFilePath, "r")
+        if f then
+            f:close()
+            os.remove(tempFilePath)
+        end
+        tempFilePath = nil
+    end)
 end
 
--- Install error handler to clean up if script crashes
+-- Setup background cleaner
+local function backgroundCleanup()
+    if not isRunning then return end
+    
+    local currentTime = os.time()
+    if currentTime - lastCleanupTime >= 1 then
+        lastCleanupTime = currentTime
+        secureCleaner()
+    end
+    
+    -- Reschedule if still running
+    if isRunning then
+        gg.setTimeout(backgroundCleanup, cleanupInterval)
+    end
+end
+
+-- Override os.exit
+local oldExit = os.exit
+os.exit = function(code)
+    isRunning = false
+    secureCleaner()
+    oldExit(code or 0)
+end
+
+-- Run a secure execution context
+local function secureExecution()
+    -- Start background cleaner
+    gg.setTimeout(backgroundCleanup, cleanupInterval)
+    
+    -- Download content
+    local content = downloadSecurely()
+    if not content then return false end
+    
+    -- Create temp file
+    if not createTempFile(content) then return false end
+    
+    -- Load the file
+    local scriptFunc, loadErr = loadfile(tempFilePath)
+    
+    if not scriptFunc then
+        errorOccurred = true
+        gg_alert("Loading error.")
+        secureCleaner()
+        return false
+    end
+    
+    -- Use protected call to execute
+    gg_toast("Starting...")
+    
+    -- Execute script with isolated environment for extra security
+    local env = setmetatable({}, {__index = _G})
+    setfenv(scriptFunc, env)
+    
+    local success, execErr = pcall(scriptFunc)
+    
+    if not success and not errorOccurred then
+        errorOccurred = true
+        gg_toast("Execution error. Try again.")
+    end
+    
+    return success
+end
+
+-- Error handler
 local function errorHandler(err)
-    -- Clean up temp file
-    if tempFile then
-        pcall(function() os.remove(tempFile) end)
-        tempFile = nil
+    isRunning = false
+    
+    -- Clean up
+    secureCleaner()
+    
+    -- Only show error if it hasn't been shown
+    if not errorOccurred then
+        errorOccurred = true
+        gg_toast("Process error. Try again.")
     end
     
-    -- Show error if not shown already
-    if not hasShownError then
-        hasShownError = true
-        gg_toast("An error occurred")
-    end
-    
-    -- Return the original error for normal error handling
     return err
 end
 
--- Run with error handling and cleanup
-xpcall(downloadAndRun, errorHandler)
+-- Run with maximum protection
+xpcall(secureExecution, errorHandler)
 
--- Final cleanup if we somehow get here 
--- (shouldn't happen as script should have taken over or exited)
-if tempFile then
-    pcall(function() os.remove(tempFile) end)
-    tempFile = nil
-end
-
--- No exit message to avoid leaking any info
+-- Ensure cleanup when script ends
+isRunning = false
+secureCleaner()
